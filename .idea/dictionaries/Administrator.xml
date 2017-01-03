@@ -1,8 +1,12 @@
 <component name="ProjectDictionaryState">
   <dictionary name="Administrator">
     <words>
+      <w>atype</w>
+      <w>btype</w>
       <w>cnames</w>
+      <w>eventpool</w>
       <w>gnames</w>
+      <w>logpath</w>
       <w>mlst</w>
     </words>
   </dictionary>

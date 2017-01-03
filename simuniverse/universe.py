@@ -1,23 +1,20 @@
 # -*- coding: utf-8 -*-
-'''
+"""
 
 @author: Rem
 @contact: remch183@outlook.com
-@site: 
+@site:
 @software: PyCharm Community Edition
 @file: universe.py
 @time: 2016/12/14 19:32
-'''
-__author__ = 'Rem'
-
+"""
 import os
 import numpy as np
-import sys
-import logging
 import pandas as pd
-from civ import *
+from .civ import *
 from time import time as systime
 
+__author__ = 'Rem'
 np.random.seed(int(systime()))
 
 # TODO: change this sick hard code part
@@ -26,11 +23,13 @@ G_LOG_MASK = [True, True, True, True, True, False, True]
 
 
 class Universe:
-    def __init__(self, logpath='log/', gl_size=1000, civ_size=100):
+    def __init__(self, logpath='../log/log/', gl_size=1000, civ_size=100):
+        # TODO 对于各种模式的设置（构成比例，根据数量调整稀疏程度，）
+        # TODO 战乱的国家发展速度下降设置
+        # TODO 资源消耗殆尽设置
         self.events = EventPool()
         self.gl = Galaxy(size=gl_size)
-        self.civ = Civilization(self.gl, self.events, size=civ_size)
-        print("Initialization done.")
+        self.civ = Civilization(self.gl, self.events)
         self.logpath = logpath
         self.clear_path()
 
@@ -41,8 +40,7 @@ class Universe:
 
     def start_sim(self):
         """开始模拟"""
-        # TODO: 保存模型运行状态，可以随时终止（或者可以设置年限终止）
-        print("="*20, '\nSim begin')
+        print("=" * 20, '\nSim begin')
         battle_num = 0
         for year in range(1000):
             self.civ.time = year
@@ -96,15 +94,16 @@ class Universe:
         :param year: 当前公元多少年
         :return:
         """
-        # TODO: 记录事件
         if year == 0:
             self._log(self.gl.pos, os.path.join(self.logpath, "pos.csv"))
 
+        # 记录文明信息
         self._log(self.civ.list, os.path.join(self.logpath, "%d_civ.csv" % (year,)),
                   log_mask=LOG_MASK,
                   columns=["name", "mlb", "btTch", "dfTch", "enemies", "allies", "ctknown", "ocl", "attr"],
                   is_civ=True
                   )
+        # 记录星系信息
         self._log(self.gl.list, os.path.join(self.logpath, "%d_galaxy.csv" % (year,)),
                   log_mask=G_LOG_MASK,
                   columns=["lbf", "mlb", "lbob", "mlst", "dtrange", "belong", "pd"],
