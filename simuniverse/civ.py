@@ -43,7 +43,7 @@ np.random.seed(int(systime()))
 # 星系变量
 # ["lbf", "mlb", "lbob",  "mlst", "dtrange", "belong", "pd"]
 # 分别对应为
-#  1劳动力  2技术水平 3自然资源 4兵力   5侦测范围    6归属国    7产值
+#  1劳动力2技术水平 3自然资源 4兵力   5侦测范围    6归属国    7产值
 # ============
 # 激进 外交 保守 = ATT DIP CON
 
@@ -64,7 +64,8 @@ class InitialValue:
     pd = 10
     btTch = 1
     dfTch = 1
-    detect_speed = 1000
+    # TODO SET 探测速度设置
+    detect_speed = 100
 
     attr_distributes = [1, 1, 1]
 
@@ -84,8 +85,9 @@ class InitialValue:
 
     # \delta pd = pd_rate * (lbf*\delta lbob) ** (1/2) * mlb
     pd_rate = 1
+    # TODO SET 资源消耗设置
     # del_lbob 每轮lbob消耗
-    del_lbob = 0.05
+    del_lbob = 0.08
     # del_mlb 每轮固定增加产量
     del_mlb = 0.03
     # 地图大小
@@ -153,10 +155,11 @@ class Galaxy:
             if belong is None:
                 continue
             resource = InitialValue.tch_resource(one[NAMES.pd])
+            # TODO SET 战争控制
             # 根据自身类型发展对应科技
             type = belong[NAMES.attr]
-            belong[NAMES.btTch] += [0, 1, 0][type] * resource
-            belong[NAMES.dfTch] += [1, 0, 1][type] * resource
+            belong[NAMES.btTch] += [0.5, 2.6, 0.5][type] * resource
+            belong[NAMES.dfTch] += [0.5, 0.4, 0.5][type] * resource
 
         # 兵力发展
         need_millitary = has_men[has_men[:, NAMES.mlst] < 99]
@@ -165,9 +168,24 @@ class Galaxy:
                 need_millitary[:, NAMES.pd], need_millitary[:, NAMES.mlst]
             )
         need_millitary[:, NAMES.mlst] += use_resource ** InitialValue.eta_milli_out
-        # TODO: 按道理来说不需要下面的两行。需要探究下numpy.array什么时候会发生复制，什么时候不会
+        # FIXME: 按道理来说不需要下面的两行。需要探究下numpy.array什么时候会发生复制，什么时候不会
         has_men[has_men[:, NAMES.mlst] < 99] = need_millitary
         self.list[self.list[:, NAMES.mlb] > 1e-4] = has_men
+
+        # 劳动力增加
+        def sigmoid(x):
+            x = np.array(x, dtype=np.float32)
+            return 1/(1 + np.exp(-x))
+        used = (1 - sigmoid(has_men[:, NAMES.lbf])) * 0.8
+        use_pd = used * 10
+        pd = has_men[:, NAMES.pd]
+        mask = (use_pd > (pd - 5))
+        used[mask] = (pd - 5)[mask]                 # 若产值充足则发展人口，否则下调人口
+        has_men[:, NAMES.lbf] += used
+        has_men[:, NAMES.pd] -= used
+        assert isinstance(self.civ, Civilization)
+        for i in range(len(self.list)):
+            self.civ.galaxy_dead(i)
 
 
 class Event:
@@ -308,6 +326,7 @@ class Civilization:
             self.list[who[NAMES.name], NAMES.ocl].append(whom)
             self.galaxy.list[whom, NAMES.belong] = who
             self.galaxy.list[whom, NAMES.mlb] = who[NAMES.mlb]
+            self.galaxy.list[whom, NAMES.lbf] = 0.0
             # 在该处发起探测
             self.detect(whom)
 
@@ -440,6 +459,38 @@ class Civilization:
             if self.get_sum_mlst(one[NAMES.ocl]) < 0.002:
                 self._destroy_civ(index)
 
+    def galaxy_dead(self, index):
+        """
+        判断星系是否死亡（资源耗尽），如果死亡则将其标记为死亡,并且把产值和兵力转移走（损失30%），
+        并且将其宿主中该元素剥夺并判断其宿主是否死亡
+
+        :param index: 星系下标
+        :return:
+        """
+        ga = self.galaxy.list[index]
+        if ga[NAMES.lbob] <= 0:
+            # 没有宿主则返回
+            if ga[NAMES.belong] is None:
+                return
+            # 若宿主文明只占有该星系则死亡
+            if len(ga[NAMES.belong][NAMES.ocl]) == 1:
+                self._destroy_civ(ga[NAMES.belong][NAMES.name])
+                return
+            # 否则将资源转移
+            cv = ga[NAMES.belong]
+            cv[NAMES.ocl].remove(index)
+            # 默认转移到第一个星系中
+            ano = cv[NAMES.ocl][0]
+            self.galaxy.list[ano, NAMES.mlst] += ga[NAMES.mlst] * 0.7
+            self.galaxy.list[ano, NAMES.pd] += ga[NAMES.pd] * 0.7
+            # 将该星系恢复到默认状态
+            self.galaxy.list[index, NAMES.mlst] = 0
+            self.galaxy.list[index, NAMES.pd] = 0
+            self.galaxy.list[index, NAMES.dtrange] = 0
+            self.galaxy.list[index, NAMES.belong] = None
+            self.galaxy.list[index, NAMES.mlb] = 0
+            self.galaxy.list[index, NAMES.lbf] = 0
+
     def _is_dead_transfer(self, a, b):
         """
         判断两个文明是否死亡，若一方死亡则所有星系传给另一方
@@ -461,7 +512,6 @@ class Civilization:
                 self.galaxy.list[g, NAMES.mlb] = a[NAMES.mlb]
                 # 在该处发起探测
                 self.detect(g)
-
 
     def _trans_galaxy(self, civ, galaxy):
         """
@@ -543,10 +593,12 @@ class Civilization:
                     if ano_mlst <= mlst:
                         # 过滤掉自己以及兵力更少的星系
                         continue
-                    aid = (ano_mlst - mlst) / 2
+                    # TODO SET 支援设置
+                    aid = min(((ano_mlst - mlst) / 2, 1000/(self.galaxy.dist[one, ano]), 5))
+                    # aid = (ano_mlst - mlst) / 2
                     # 简单的平分法
                     # TODO： 添加函数，对大兵力进行限制
-                    ano_mlst, mlst = mlst + aid, mlst + aid
+                    ano_mlst, mlst = ano_mlst - aid, mlst + aid
                     if mlst >= 20:
                         break
                     self.galaxy.list[ano, NAMES.mlst] = ano_mlst
