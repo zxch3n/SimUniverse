@@ -1,25 +1,13 @@
 # -*- coding: utf-8 -*-
 """
 
+
 @author: Rem
 @contact: remch183@outlook.com
 @site:
 @software: PyCharm Community Edition
 @file: civ.py
 @time: 2016/12/14 19:37
-
-
-TODO:
-
-    向量和标量区分命名
-
-    Civilization
-    - 饥荒判断
-    - 技术发展
-
-    文明关系记录
-    资源消耗记录
-
 """
 import numpy as np
 from queue import PriorityQueue
